@@ -1,0 +1,273 @@
+<! DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Secret Agent Combat Game - Aditya Kumar</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            user-select: none;
+        }
+        /* Mobile Touch Controls UI */
+        #ui-container {
+            position: absolute;
+            bottom: 30px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            box-sizing: border-box;
+            z-index: 10;
+            pointer-events: none;
+        }
+        /* Touch Joystick Container */
+        #joystick-zone {
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            position: relative;
+            pointer-events: auto;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+        }
+        #joystick-stick {
+            width: 50px;
+            height: 50px;
+            background: #ffffff;
+            border-radius: 50%;
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        /* Action Buttons */
+        .action-btn {
+            width: 80px;
+            height: 80px;
+            background: #ff3b30;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            pointer-events: auto;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        .action-btn:active {
+            background: #cc2f26;
+            transform: scale(0.95);
+        }
+        /* Loading Text */
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+            z-index: 20;
+        }
+    </style>
+    <!-- Libraries CDN -->
+    <script src="https://cloudflare.com"></script>
+    <script src="https://cloudflare.com"></script>
+</head>
+<body>
+
+    <div id="loading">Game Load Ho Raha Hai...</div>
+
+    <div id="ui-container">
+        <!-- Left Joystick -->
+        <div id="joystick-zone">
+            <div id="joystick-stick"></div>
+        </div>
+        <!-- Right Punch Button -->
+        <div class="action-btn" id="punch-btn">PUNCH</div>
+    </div>
+
+    <script>
+        window.addEventListener('load', () => {
+            document.getElementById('loading').style.display = 'none';
+        });
+
+        // 1. Scene, Camera & Physics Setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xa0a0a0);
+        scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0);
+
+        // Lights
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+        hemiLight.position.set(0, 20, 0);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Ground Physics and Graphic
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+        world.addBody(groundBody);
+
+        // 2. Secret Agent (Player Model)
+        const playerGroup = new THREE.Group();
+        
+        // Agent Suit
+        const bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.5);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+        const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+        bodyMesh.position.y = 0.6;
+        bodyMesh.castShadow = true;
+        playerGroup.add(bodyMesh);
+
+        // Agent Head & Glasses
+        const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+        const headMesh = new THREE.Mesh(headGeo, headMat);
+        headMesh.position.y = 1.4;
+        headMesh.castShadow = true;
+        playerGroup.add(headMesh);
+
+        const glassGeo = new THREE.BoxGeometry(0.35, 0.1, 0.1);
+        const glassMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+        glassMesh.position.set(0, 1.45, 0.2);
+        playerGroup.add(glassMesh);
+
+        scene.add(playerGroup);
+
+        // Player Physics
+        const playerShape = new CANNON.Box(new CANNON.Vec3(0.4, 0.6, 0.25));
+        const playerBody = new CANNON.Body({ mass: 5, shape: playerShape });
+        playerBody.position.set(0, 3, 0);
+        playerBody.angularDamping = 0.9;
+        world.addBody(playerBody);
+
+        // 3. Enemy Target
+        const enemyGeo = new THREE.BoxGeometry(0.8, 1.6, 0.8);
+        const enemyMat = new THREE.MeshStandardMaterial({ color: 0xcc0000 });
+        const enemyMesh = new THREE.Mesh(enemyGeo, enemyMat);
+        enemyMesh.castShadow = true;
+        scene.add(enemyMesh);
+
+        const enemyShape = new CANNON.Box(new CANNON.Vec3(0.4, 0.8, 0.4));
+        const enemyBody = new CANNON.Body({ mass: 2, shape: enemyShape });
+        enemyBody.position.set(0, 0.8, -5);
+        world.addBody(enemyBody);
+
+        // 4. Mobile Controls Logic
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickStick = document.getElementById('joystick-stick');
+        let moveX = 0, moveZ = 0;
+        let isMoving = false;
+
+        joystickZone.addEventListener('touchstart', () => { isMoving = true; });
+        joystickZone.addEventListener('touchmove', (e) => {
+            const rect = joystickZone.getBoundingClientRect();
+            const touch = e.touches[0];
+            
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            let deltaX = touch.clientX - centerX;
+            let deltaY = touch.clientY - centerY;
+            const distance = Math.min(Math.sqrt(deltaX*deltaX + deltaY*deltaY), 45);
+            
+            const angle = Math.atan2(deltaY, deltaX);
+            const stickX = distance * Math.cos(angle);
+            const stickY = distance * Math.sin(angle);
+            
+            joystickStick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+            
+            moveX = stickX / 45;
+            moveZ = stickY / 45;
+        });
+
+        joystickZone.addEventListener('touchend', () => {
+            isMoving = false;
+            joystickStick.style.transform = 'translate(0px, 0px)';
+            moveX = 0;
+            moveZ = 0;
+        });
+
+        // Attack Event
+        document.getElementById('punch-btn').addEventListener('touchstart', () => {
+            // Distance Check
+            const dist = playerBody.position.distanceTo(enemyBody.position);
+            if(dist < 2.5) {
+                enemyBody.velocity.set(0, 4, -12);
+            }
+            playerGroup.scale.set(1.1, 1, 1.2);
+            setTimeout(() => playerGroup.scale.set(1, 1, 1), 100);
+        });
+
+        // 5. Game Loop
+        const clock = new THREE.Clock();
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const timeStep = Math.min(clock.getDelta(), 0.1);
+            world.step(timeStep);
+            
+            // Sync Visuals with Physics
+            playerGroup.position.copy(playerBody.position);
+            playerGroup.quaternion.copy(playerBody.quaternion);
+            
+            enemyMesh.position.copy(enemyBody.position);
+            enemyMesh.quaternion.copy(enemyBody.quaternion);
+
+            // Movement physics forces applied
+            if (isMoving) {
+                playerBody.velocity.x = moveX * 6;
+                playerBody.velocity.z = moveZ * 6;
+                
+                const targetAngle = Math.atan2(-moveX, -moveZ);
+                playerGroup.rotation.y = targetAngle;
+            } else {
+                playerBody.velocity.x *= 0.8;
+                playerBody.velocity.z *= 0.8;
+            }
+
+            // Camera follow view
+            camera.position.set(playerBody.position.x, playerBody.position.y + 4, playerBody.position.z + 8);
+            camera.lookAt(playerBody.position);
+            
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+                                           </html>
+                                           
